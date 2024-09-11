@@ -74,7 +74,7 @@ function gen_cone(radius, height, num_segs)
 end
 
 function is_outside_cone(x_::Float64, y_::Float64, z_::Float64, radius::Float64, height::Float64)
-    if (z_ < 0.0) || (z_ > height)
+    if (z_ <= 0.0) || (z_ >= height)
         return true  # Ponto está fora da altura do cone
     end
 
@@ -115,9 +115,23 @@ function calc_E_field(s::surface, r::Tuple{Float64, Float64, Float64})
     return E
 end
 
+function calc_potential(s::surface, r::Tuple{Float64, Float64, Float64})
+    V = 0.0
+    A = area(s)
+    for e in s.elements
+        rvec = [r[1] - e.center[1], r[2] - e.center[2], r[3] - e.center[3]]
+        q = e.area / A
+        ramp = norm(rvec)
+        if ramp > 0.0
+            V += q / ramp
+        end
+    end
+    return V
+end
+
 R = 1.0
 H = 2.0
-surf = gen_cone(R, H, 10);
+surf = gen_cone(R, H, 20);
 println(length(surf.elements))
 
 sx = [e.center[1] for e in surf.elements]
@@ -129,7 +143,7 @@ y_range = range(-1.3, 1.3, length=7)
 z_range = range(-0.2, 2.2, length=7)
 # x_range = [0.0,]
 # y_range = [0.0,]
-# z_range = [1.2,]
+# z_range = [H,]
 
 gr = [(x, y, z) for x in x_range for y in y_range for z in z_range]
 
@@ -156,9 +170,6 @@ for (xi, yi, zi) in gr
 end
 magnitudes ./= maximum(magnitudes)
 
-plt.plot(magnitudes)
-plt.show()
-
 colormap = cm.viridis
 colors = colormap(magnitudes)
 
@@ -166,8 +177,34 @@ fig = plt.figure(figsize=(10,10))
 ax = fig.add_subplot(111, projection="3d")
 # ax.plot_trisurf(sx, sy, sz)
 ax.plot(sx, sy, sz, ".C1", alpha=0.5)
-# ax.quiver(x, y, z, vx, vy, vz, length=0.1, normalize=false, color="black")
+# # ax.quiver(x, y, z, vx, vy, vz, length=0.1, normalize=false, color="black")
 ax.quiver(x, y, z, vx, vy, vz, length=0.1, normalize=true, color=colors)
-ax.set_aspect("equal")
-# ax.set_zlim(0, 0.02)
+# ax.set_aspect("equal")
+# # ax.set_zlim(0, 0.02)
 plt.show()
+
+
+# r0 = (1.1, 0.0, 0.0)
+# v0 = calc_potential(surf, r0)
+
+# function findV(s::surface, v0, r0, lista, d=0.1, maxit=10)
+#     drange = [-1.0*abs(d), +1.0*abs(d)]
+#     gri = [(r0[1]+dx, r0[2]+dy, r0[3]+dz) for dx in drange for dy in drange for dz in drange]
+#     V = [calc_potential(s, p) for p in gri]
+#     idx = argmin(abs.(V .- v0))
+#     r = [gri[idx][1], gri[idx][2], gri[idx][3], V[idx]]
+#     push!(r, V[idx])
+#     push!(lista, r)
+#     if length(lista) > maxit
+#         return
+#     else
+#         return findV(s, v0, r, lista, d, maxit)
+#     end
+# end
+
+# xyz = []
+# findV(surf, v0, r0, xyz, 0.5, 500)
+# x_ = [i[1] for i in xyz]
+# y_ = [i[2] for i in xyz]
+# z_ = [i[3] for i in xyz]
+# V_ = [i[4] for i in xyz]
