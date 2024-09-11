@@ -84,7 +84,7 @@ function is_outside_cone(x_::Float64, y_::Float64, z_::Float64, radius::Float64,
     r_ = sqrt(x_^2 + y_^2)  # Distância radial no plano
     r_cone = radius * (1 - (z_/height))  # Raio do cone no plano z
 
-    return r_ > r_cone  # Retorna true se o ponto estiver fora do cone
+    return r_ > r_cone*1.1  # Retorna true se o ponto estiver fora do cone
 end
 
 function is_outside_sphere(x_::Float64, y_::Float64, z_::Float64, radius::Float64)
@@ -107,30 +107,26 @@ function calc_E_field(points::Array{Tuple{Float64, Float64, Float64}, 1}, r::Tup
     for p in points
         rvec = (r[1]-p[1], r[2]-p[2], r[3]-p[3])
         ramp = sqrt(rvec[1]^2 + rvec[2]^2 + rvec[2]^2)
-        if ramp != 0.0
-            Ex += rvec[1] / (ramp^3)
-            Ey += rvec[2] / (ramp^3)
-            Ez += rvec[3] / (ramp^3)
-        end
+        # if ramp != 0.0
+        Ex += (rvec[1] / (ramp^3))
+        Ey += (rvec[2] / (ramp^3))
+        Ez += (rvec[3] / (ramp^3))
+        # end
     end
     return (Ex, Ey, Ez)
 end
 
-z = 0
-
-z < 0
-
 R, H = 1.0, 2.0
-N = 100
-N2 = 100
+N = 200
+N2 = N
 # surf = gen_cone(R, H, N, N2);
 surf = gen_sphere(R, N)
 
 # Generate a grid of points (x, y, z)
-x_range = range(-1.1, 1.1, length=15)
-y_range = range(-1.1, 1.1, length=15)
+x_range = range(-3, 3, length=25)
+y_range = range(-3, 3, length=25)
 # z_range = range(-1.1, 1.1, length=7)
-z_range = [0.0,]
+z_range = [2.0,]
 
 gr = [(x, y, z) for x in x_range for y in y_range for z in z_range]
 
@@ -157,14 +153,15 @@ for (xi, yi, zi) in gr
 end
 
 magnitudes ./= maximum(magnitudes)
-magnitudes
+
+plt.plot(magnitudes)
+plt.show()
 
 colormap = cm.viridis
 colors = colormap(magnitudes)
 
 fig = plt.figure(figsize=(10,10))
 ax = fig.add_subplot(111, projection="3d")
-
 # ax.plot_trisurf(surf.x, surf.y, surf.z)
 ax.plot(surf.x, surf.y, surf.z, ".")
 ax.quiver(x, y, z, vx, vy, vz, length=0.2, normalize=true, color=colors)
