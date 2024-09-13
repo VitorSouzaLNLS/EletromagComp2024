@@ -1,20 +1,24 @@
 using PyCall
 
+mplt = pyimport("matplotlib")
 plt = pyimport("matplotlib.pyplot")
 cm = pyimport("matplotlib.cm")
 np = pyimport("numpy")
+
+mplt.use("tkagg")
 
 struct element
     center
     area
 end
 
-struct surface
+mutable struct surface
     elements::Vector{element}
-    surface(elems) = new(elems)
+    Q::Float64
+    surface(elems, Q=0.0) = new(elems, Q)
 end
 
-area(s::surface) = sum([e.area for e in s.elements])
+area(s::surface) = length(s.elements) > 0 ? sum([e.area for e in s.elements]) : 0.0
 
 function frustum_area(R, r, dz)
     L = sqrt(dz^2 + (R - r)^2)
@@ -101,64 +105,99 @@ end
 
 norm(vec) = sqrt(sum(vec.^2))
 
-function calc_E_field(s::surface, r::Tuple{Float64, Float64, Float64})
+struct charge
+    r::Tuple{Float64, Float64, Float64}
+    Q::Float64
+end
+
+function calc_E_field(s::surface, r::Tuple{Float64, Float64, Float64}, charges::Vector{charge}=charge[])
     E = [0.0, 0.0, 0.0]
+    tol = 0.0
     A = area(s)
+    # println(A)
     for e in s.elements
         rvec = [r[1] - e.center[1], r[2] - e.center[2], r[3] - e.center[3]]
-        q = e.area / A
+        q = (e.area / A) * s.Q
         ramp = norm(rvec)^3
-        if ramp > 0.0
+        if ramp > tol
             E = E .+ (q .* rvec ./ ramp)
+        end
+    end
+    for e in charges
+        rvec = [r[1] - e.r[1], r[2] - e.r[2], r[3] - e.r[3]]
+        ramp = norm(rvec)^3
+        if ramp > tol
+            E = E .+ (e.Q .* rvec ./ ramp)
         end
     end
     return E
 end
 
-function calc_potential(s::surface, r::Tuple{Float64, Float64, Float64})
-    V = 0.0
-    A = area(s)
-    for e in s.elements
-        rvec = [r[1] - e.center[1], r[2] - e.center[2], r[3] - e.center[3]]
-        q = e.area / A
-        ramp = norm(rvec)
-        if ramp > 0.0
-            V += q / ramp
+# function calc_potential(s::surface, r::Tuple{Float64, Float64, Float64})
+#     V = 0.0
+#     A = area(s)
+#     for e in s.elements
+#         rvec = [r[1] - e.center[1], r[2] - e.center[2], r[3] - e.center[3]]
+#         q = e.area / A
+#         ramp = norm(rvec)
+#         if ramp > 0.0
+#             V += q / ramp
+#         end
+#     end
+#     return V
+# end
+
+function cone_surf_xyz(R, H, subdiv=10)
+    # Make data
+    N = Int(ceil(subdiv))
+    h = Float64(H)
+    theta = np.linspace(0, 2π, N)  # Angular divisions
+    z = np.linspace(0, h, N)       # Height divisions
+
+    # Create arrays for x, y, z coordinates
+    x = np.zeros((length(z), length(theta)))
+    y = np.zeros((length(z), length(theta)))
+    Z = np.zeros((length(z), length(theta)))
+
+    for i in eachindex(z)
+        r = R * (1 - z[i] / h)  # Radius decreases linearly with height
+        for j in eachindex(theta)
+            x[i, j] = r * cos(theta[j])
+            y[i, j] = r * sin(theta[j])
+            Z[i, j] = z[i]
         end
     end
-    return V
+
+    # Plot the surface
+    return x, y, Z
 end
 
 R = 1.0
 H = 2.0
 surf = gen_cone(R, H, 20);
+surf.Q = -2.0
+
 println(length(surf.elements))
+cargas = [
+    charge((-1.5, 0.0, 1.0), 1.0),
+    charge((1.5, 0.0, 1.0), 1.0),
+    # charge((0.0, 0.0, -0.3), 1.0),
+]
+qsx = [e.r[1] for e in cargas]
+qsy = [e.r[2] for e in cargas]
+qsz = [e.r[3] for e in cargas]
 
-sx = [e.center[1] for e in surf.elements]
-sy = [e.center[2] for e in surf.elements]
-sz = [e.center[3] for e in surf.elements]
-
-x_range = range(-1.3, 1.3, length=7)
-y_range = range(-1.3, 1.3, length=7)
-z_range = range(-0.2, 2.2, length=7)
-# x_range = [0.0,]
-# y_range = [0.0,]
-# z_range = [H,]
-
+x_range = range(-1.5, 1.5, length=8)
+y_range = range(-1.5, 1.5, length=8)
+z_range = range(-0.2, 2.5, length=8)
 gr = [(x, y, z) for x in x_range for y in y_range for z in z_range]
+vx, vy, vz, x, y, z, magnitudes = [], [], [], [], [], [], []
 
-# Calculate vectors for each point
-vx = Float64[]
-vy = Float64[]
-vz = Float64[]
-x = Float64[]
-y = Float64[]
-z = Float64[]
-magnitudes = Float64[]
+# surf = surface([], 0.0)
 
 for (xi, yi, zi) in gr
     if is_outside("Cone", xi, yi, zi, R, H)
-        E = calc_E_field(surf, (xi, yi, zi))
+        E = calc_E_field(surf, (xi, yi, zi), cargas)
         push!(vx, E[1])
         push!(vy, E[2])
         push!(vz, E[3])
@@ -175,14 +214,15 @@ colors = colormap(magnitudes)
 
 fig = plt.figure(figsize=(10,10))
 ax = fig.add_subplot(111, projection="3d")
-# ax.plot_trisurf(sx, sy, sz)
-ax.plot(sx, sy, sz, ".C1", alpha=0.5)
-# # ax.quiver(x, y, z, vx, vy, vz, length=0.1, normalize=false, color="black")
+if length(cargas) > 0
+    ax.plot(qsx, qsy, qsz, "oC3", ms=5)
+end
+if surf.Q != 0.0
+    ax.plot_surface(cone_surf_xyz(R, H, 30)..., alpha=1.0, color="black")
+end
 ax.quiver(x, y, z, vx, vy, vz, length=0.1, normalize=true, color=colors)
-# ax.set_aspect("equal")
-# # ax.set_zlim(0, 0.02)
+ax.set_aspect("equal")
 plt.show()
-
 
 # r0 = (1.1, 0.0, 0.0)
 # v0 = calc_potential(surf, r0)
