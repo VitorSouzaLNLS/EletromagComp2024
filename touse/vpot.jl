@@ -1,4 +1,4 @@
-using DifferentialEquations, LinearAlgebra, Makie
+using DifferentialEquations, LinearAlgebra, GLMakie, NLsolve
 
 # Estrutura para uma carga pontual
 struct charge
@@ -49,9 +49,9 @@ end
 # Crie algumas cargas como exemplo
 charges = [charge([1.0, 0.0, 0.0], 1.0), charge([-1.0, 0.0, 0.0], -1.0)]
 
-dz = 0.2
-x, y, z = [], [], []
-zi = [0.0, ]
+# dz = 0.1
+# x, y, z = [], [], []
+# zi = [0.0, ]
 
 # tspan = (0.0, 10.0)  # Intervalo de "tempo" (parâmetro ao longo da superfície)
 # st = [0.5, 0.5, 0.0]
@@ -73,6 +73,8 @@ function f(charges, xy, z, V0)
     return calc_V(charges, [xy[1], xy[2], z]) - V0
 end
 
+st0 = [0.5, 0.5, 0.0]
+
 V0 = calc_V(charges, st0)
 
 guess = [st0[1], st0[2]]
@@ -82,35 +84,34 @@ z = st0[3] + dz
 result = nlsolve(xy -> f(charges, xy, z, V0), guess)
 
 # Plotar a curva equipotencial resultante
-st0 = [0.5, 0.5, 0.0]
-if true
-    fig = Figure()
-    ax = Axis3(fig[1,1])
-    for zi in range(-1.0, 1.0, 10)
-        tspan = (0.0, 10.0)  # Intervalo de "tempo" (parâmetro ao longo da superfície)
-        xi, yi = result.zero
-        st = [0.5 - zi, 0.5, 0.0 + zi]
+# if true
+fig = Figure()
+ax = Axis3(fig[1,1])
+for zi in range(-0.8, 0.8, 25)
+    tspan = (0.0, 20.0)  # Intervalo de "tempo" (parâmetro ao longo da superfície)
+    xi, yi = result.zero
+    st = [0.5 - zi, 0.5, 0.0 + zi]
 
-        V0 = calc_V(charges, st0)
-        guess = [st0[1], st0[2]]
-        result = nlsolve(xy -> f(charges, xy, zi, V0), guess)
-        xi, yi = result.zero
-        u0 = [xi, yi, zi]  # Condição inicial (posição inicial)
-        prob = ODEProblem(equipotential_direction!, u0, tspan, charges)
+    V0 = calc_V(charges, st0)
+    guess = [st0[1], st0[2]]
+    result = nlsolve(xy -> f(charges, xy, zi, V0), guess)
+    xi, yi = result.zero
+    u0 = [xi, yi, zi]  # Condição inicial (posição inicial)
+    prob = ODEProblem(equipotential_direction!, u0, tspan, charges)
 
-        # Resolver usando o solver padrão (Runge-Kutta 4)
-        sol = solve(prob, Tsit5())  # Tsit5 é um método adaptativo de Runge-Kutta
+    # Resolver usando o solver padrão (Runge-Kutta 4)
+    sol = solve(prob, Tsit5())  # Tsit5 é um método adaptativo de Runge-Kutta
 
-        x = [r[1] for r in copy(sol.u)]
-        y = [r[2] for r in copy(sol.u)]
-        z = [r[3] for r in copy(sol.u)]
-        if zi == 0 || zi == 1.0
-            println(calc_V(charges, sol.u[end]), "  $(sol.u[end])", "  ", calc_V(charges, sol.u[1]), "  $(sol.u[1])")
-        end
-        scatter!(ax, x, y, z, color=:blue, linewidth=2)
+    x = [r[1] for r in copy(sol.u)]
+    y = [r[2] for r in copy(sol.u)]
+    z = [r[3] for r in copy(sol.u)]
+    if zi == 0 || zi == 1.0
+        println(calc_V(charges, sol.u[end]), "  $(sol.u[end])", "  ", calc_V(charges, sol.u[1]), "  $(sol.u[1])")
     end
-    scatter!(ax, xc, yc, zc, color=:red)  # Posições das cargas
-    display(fig)
+    # scatter!(ax, x, y, z, color=:blue, linewidth=2)
+    lines!(ax, x, y, z, color=:blue, linewidth=1, alpha=0.5)
 end
-
+scatter!(ax, xc, yc, zc, color=:red, markersize=15)  # Posições das cargas
+display(fig)
+# end
 using  NLsolve
